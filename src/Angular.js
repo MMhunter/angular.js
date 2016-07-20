@@ -1,6 +1,7 @@
 'use strict';
 
 /* We need to tell jshint what variables are being exported */
+/* 告诉jshint以下的变量会被export,不要警告
 /* global angular: true,
   msie: true,
   jqLite: true,
