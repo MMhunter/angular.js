@@ -3,6 +3,10 @@
 
 /**
  * Computes a hash of an 'obj'.
+ * 计算当前给定对象的hash值，string的hash为string本身，number的hash为number.toString(),
+ *  obj的hashkey为他的$$hashkey属性（如果是函数就是函数的执行结果）或者一个自动生成的uid
+ * 在运行这个函数后，如果obj本来没有$$hashkey,该函数的执行结果会被赋给该obj.$$hashKey
+ * 最后的运行返回值为 "参数类型:hash值";
  * Hash of a:
  *  string is string
  *  number is number as string
@@ -43,7 +47,7 @@ function HashMap(array, isolatedUid) {
       return ++uid;
     };
   }
-  forEach(array, this.put, this);
+  forEach(array, this.put, this); //angular.forEach函数，见src/Angular.js
 }
 HashMap.prototype = {
   /**
@@ -52,6 +56,7 @@ HashMap.prototype = {
    * @param value value to store can be any type
    */
   put: function(key, value) {
+    console.log(this);
     this[hashKey(key, this.nextUid)] = value;
   },
 

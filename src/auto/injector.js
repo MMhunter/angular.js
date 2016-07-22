@@ -9,7 +9,8 @@
  * @description
  * Creates an injector object that can be used for retrieving services as well as for
  * dependency injection (see {@link guide/di dependency injection}).
- *
+ * angularj.inject函数会创建一个能够被用于获取Service，以及用于依赖注入的injector object
+ * 
  * @param {Array.<string|Function>} modules A list of module functions or their aliases. See
  *     {@link angular.module}. The `ng` module must be explicitly added.
  * @param {boolean=} [strictDi=false] Whether the injector should be in strict mode, which
@@ -63,13 +64,18 @@
  * Implicit module which gets automatically added to each {@link auto.$injector $injector}.
  */
 
-var ARROW_ARG = /^([^\(]+?)=>/;
-var FN_ARGS = /^[^\(]*\(\s*([^\)]*)\)/m;
-var FN_ARG_SPLIT = /,/;
-var FN_ARG = /^\s*(_?)(\S+?)\1\s*$/;
-var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+/*
+* 神奇的自动注入，可以根据当前这个函数在程序中的写法，根据不同的参数命名进行注入
+*/
+
+var ARROW_ARG = /^([^\(]+?)=>/; //用于匹配箭头函数 （a,b)=> 匹配出第二个子串为参数 a,b
+var FN_ARGS = /^[^\(]*\(\s*([^\)]*)\)/m; //用于匹配函数表达试 a(b,c) ，匹配出第二个子串为参数 b,c
+var FN_ARG_SPLIT = /,/;  //用于匹配分割符,
+var FN_ARG = /^\s*(_?)(\S+?)\1\s*$/ //可能是用于把类似 _asd_ 的字符串中的asd取出来
+var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg; //匹配注释
 var $injectorMinErr = minErr('$injector');
 
+//将函数字符串化
 function stringifyFn(fn) {
   // Support: Chrome 50-51 only
   // Creating a new string by adding `' '` at the end, to hack around some bug in Chrome v50/51
@@ -78,12 +84,14 @@ function stringifyFn(fn) {
   return Function.prototype.toString.call(fn) + ' ';
 }
 
+//根据函数的定义提取出参数字符串
 function extractArgs(fn) {
-  var fnText = stringifyFn(fn).replace(STRIP_COMMENTS, ''),
-      args = fnText.match(ARROW_ARG) || fnText.match(FN_ARGS);
+  var fnText = stringifyFn(fn).replace(STRIP_COMMENTS, ''), //去除函数中的数字
+      args = fnText.match(ARROW_ARG) || fnText.match(FN_ARGS); //匹配箭头函数或普通函数 ,args[1]为参数字符串，比如 a(b,c) 函数,args[1]为"b,c"
   return args;
 }
 
+//为匿名函数创建基本的函数结构,为了debug方便？
 function anonFn(fn) {
   // For anonymous functions, showing at the very least the function signature can help in
   // debugging.
@@ -94,22 +102,25 @@ function anonFn(fn) {
   return 'fn';
 }
 
+//自动进行dependency annotation,返回一个要注入的字符串数组
 function annotate(fn, strictDi, name) {
   var $inject,
       argDecl,
       last;
 
   if (typeof fn === 'function') {
+    //如果函数已经定义过$inject了，就放弃
     if (!($inject = fn.$inject)) {
       $inject = [];
-      if (fn.length) {
-        if (strictDi) {
+      if (fn.length) { //function的长度为参数数量
+        if (strictDi) {//strict 模式不允许使用自动注入
           if (!isString(name) || !name) {
             name = fn.name || anonFn(fn);
           }
           throw $injectorMinErr('strictdi',
             '{0} is not using explicit annotation and cannot be invoked in strict mode', name);
         }
+        //将参数字符串根据逗号分隔，去除两端的空格和_符号，并加入$inject数组;
         argDecl = extractArgs(fn);
         forEach(argDecl[1].split(FN_ARG_SPLIT), function(arg) {
           arg.replace(FN_ARG, function(all, underscore, name) {
@@ -117,14 +128,15 @@ function annotate(fn, strictDi, name) {
           });
         });
       }
-      fn.$inject = $inject;
+      fn.$inject = $inject;//设置该函数的$inject元素
     }
   } else if (isArray(fn)) {
     last = fn.length - 1;
+    //如果最后一个元素是函数
     assertArgFn(fn[last], 'fn');
     $inject = fn.slice(0, last);
   } else {
-    assertArgFn(fn, 'fn', true);
+    assertArgFn(fn, 'fn', true); //既不是函数又不是数组，理论上这里必然抛出异常
   }
   return $inject;
 }
@@ -155,17 +167,21 @@ function annotate(fn, strictDi, name) {
  *
  * JavaScript does not have annotations, and annotations are needed for dependency injection. The
  * following are all valid ways of annotating function with injection arguments and are equivalent.
- *
+ * javascript 没有注解，但是对于依赖注入来说，注解是必要的。下面介绍3种正确进行依赖注入的方法
+ * 
  * ```js
- *   // inferred (only works if code not minified/obfuscated)
+ *   // inferred (only works if code not minified/obfuscated) 
+ *   //根据函数的参数名进行推测
  *   $injector.invoke(function(serviceA){});
  *
  *   // annotated
+ *   // 设定$inject数组
  *   function explicit(serviceA) {};
  *   explicit.$inject = ['serviceA'];
  *   $injector.invoke(explicit);
  *
  *   // inline
+ *   // 传入一个数组，其中前面都是要注入的service，最后一个为函数
  *   $injector.invoke(['serviceA', function(serviceA){}]);
  * ```
  *
@@ -190,6 +206,7 @@ function annotate(fn, strictDi, name) {
  *
  * @description
  * Return an instance of the service.
+ * 返回一个Service的实例
  *
  * @param {string} name The name of the instance to retrieve.
  * @param {string=} caller An optional string to provide the origin of the function call for error messages.
@@ -202,12 +219,13 @@ function annotate(fn, strictDi, name) {
  *
  * @description
  * Invoke the method and supply the method arguments from the `$injector`.
- *
+ * 调用函数，对函数中的参数进行依赖注入
+ * 
  * @param {Function|Array.<string|Function>} fn The injectable function to invoke. Function parameters are
  *   injected according to the {@link guide/di $inject Annotation} rules.
- * @param {Object=} self The `this` for the invoked method.
+ * @param {Object=} self The `this` for the invoked method. //对于函数中的this,绑定为self
  * @param {Object=} locals Optional object. If preset then any argument names are read from this
- *                         object first, before the `$injector` is consulted.
+ *                         object first, before the `$injector` is consulted. //不需要进行注入的本地变量
  * @returns {*} the value returned by the invoked `fn` function.
  */
 
@@ -217,7 +235,8 @@ function annotate(fn, strictDi, name) {
  *
  * @description
  * Allows the user to query if the particular service exists.
- *
+ * 使用这个函数来查询是否存在相应名字的Service
+ * 
  * @param {string} name Name of the service to query.
  * @returns {boolean} `true` if injector has given service.
  */
@@ -229,7 +248,8 @@ function annotate(fn, strictDi, name) {
  * Create a new instance of JS type. The method takes a constructor function, invokes the new
  * operator, and supplies all of the arguments to the constructor function as specified by the
  * constructor annotation.
- *
+ * 通过$inject来初始化一个类的实例
+ * 
  * @param {Function} Type Annotated constructor function.
  * @param {Object=} locals Optional object. If preset then any argument names are read from this
  * object first, before the `$injector` is consulted.
@@ -245,6 +265,8 @@ function annotate(fn, strictDi, name) {
  * used by the injector to determine which services need to be injected into the function when the
  * function is invoked. There are three ways in which the function can be annotated with the needed
  * dependencies.
+ * 返回给定函数需要注入的service列表。$inject.invoke调用函数时会被调用。有三种对需要注入的service进行注解的方法，
+ * 如下又给了3个例子（这里就不翻译了，和上面重复的比较多）
  *
  * # Argument names
  *
@@ -332,36 +354,59 @@ function annotate(fn, strictDi, name) {
  * The {@link auto.$provide $provide} service has a number of methods for registering components
  * with the {@link auto.$injector $injector}. Many of these functions are also exposed on
  * {@link angular.Module}.
+ * 
+ * $provide 服务提供了一系列用来在$injector中注册组件的函数。这些函数大多数能在angular.module中使用。
  *
  * An Angular **service** is a singleton object created by a **service factory**.  These **service
  * factories** are functions which, in turn, are created by a **service provider**.
  * The **service providers** are constructor functions. When instantiated they must contain a
  * property called `$get`, which holds the **service factory** function.
+ * 
+ * angular 的service 是一个由 service factory创建的单例，而这些service factory则是由service providers进行创建。
+ * service providers都是一些构造函数，当他们被初始化时，他们必须都有一个$get方法，而这个$get方法就包含了刚刚所说的$service factory.
  *
  * When you request a service, the {@link auto.$injector $injector} is responsible for finding the
  * correct **service provider**, instantiating it and then calling its `$get` **service factory**
  * function to get the instance of the **service**.
+ * 
+ * 当你需要一个service时，$injector会为你找到对应的service provider, 然后初始化它并且执行它的$get方法，也就是service的factory方法，然后
+ * 你就会获得这个service的实例
  *
  * Often services have no configuration options and there is no need to add methods to the service
  * provider.  The provider will be no more than a constructor function with a `$get` property. For
  * these cases the {@link auto.$provide $provide} service has additional helper methods to register
  * services without specifying a provider.
+ * 
+ * 一般来说，service本身都不需要配置项（也就是不会在实例化时需要额外参数),而这时定义一个service provider并且添加一个孤零零的$get函数显然就失去了意义。
+ * 因此，我们有了$provide这个service,能够有一些额外的函数来帮助我们注册这些不需要定义provider的service.
+ *
  *
  * * {@link auto.$provide#provider provider(name, provider)} - registers a **service provider** with the
  *     {@link auto.$injector $injector}
+ * provider函数，在$inject中注册一个service provider
+ * 
  * * {@link auto.$provide#constant constant(name, obj)} - registers a value/object that can be accessed by
  *     providers and services.
+ * constant函数, 注册一个值或对象，它能够被各种providers和services访问到（通过依赖注入)
+ * 
  * * {@link auto.$provide#value value(name, obj)} - registers a value/object that can only be accessed by
  *     services, not providers.
+ * value函数, 注册一个值或对象，它能够被services访问到（通过依赖注入), 而providers访问不到它
+ * 
  * * {@link auto.$provide#factory factory(name, fn)} - registers a service **factory function**
  *     that will be wrapped in a **service provider** object, whose `$get` property will contain the
  *     given factory function.
+ * factory 注册一个factory function,它会被包裹在一个service provider中，而这个provider的$get就是这个function
+ * 
  * * {@link auto.$provide#service service(name, Fn)} - registers a **constructor function**
  *     that will be wrapped in a **service provider** object, whose `$get` property will instantiate
  *      a new object using the given constructor function.
+ * service 注册一个construct function,它会被包裹在一个service provider中，而这个provider的$get函数会使用这个construct function创造一个实例
+ * 
  * * {@link auto.$provide#decorator decorator(name, decorFn)} - registers a **decorator function** that
  *      will be able to modify or replace the implementation of another service.
- *
+ * decorator 注册一个decorator 函数，可以用来修改或者替换已有的service实例
+ * 
  * See the individual methods for more information and examples.
  */
 
@@ -644,13 +689,15 @@ function annotate(fn, strictDi, name) {
  * ```
  */
 
-
+//这个函数就会返回$inject对象，它在src/Angular.js中被调用
 function createInjector(modulesToLoad, strictDi) {
+  //是否开启strict模式
   strictDi = (strictDi === true);
   var INSTANTIATING = {},
       providerSuffix = 'Provider',
       path = [],
-      loadedModules = new HashMap([], true),
+      loadedModules = new HashMap([], true), //此处HashMap为angular自己定义的类型，具体见src/apis.js
+      //provider缓存
       providerCache = {
         $provide: {
             provider: supportObject(provider),
@@ -661,11 +708,13 @@ function createInjector(modulesToLoad, strictDi) {
             decorator: decorator
           }
       },
+      //provider Injector, 用于存储，处理provider的service
       providerInjector = (providerCache.$injector =
           createInternalInjector(providerCache, function(serviceName, caller) {
             if (angular.isString(caller)) {
               path.push(caller);
             }
+            //如果调用了这个函数，说明相应名字的provider不存在
             throw $injectorMinErr('unpr', "Unknown provider: {0}", path.join(' <- '));
           })),
       instanceCache = {},
@@ -808,14 +857,18 @@ function createInjector(modulesToLoad, strictDi) {
 
   function createInternalInjector(cache, factory) {
 
+    //获得service
     function getService(serviceName, caller) {
+      //如果service正在provider缓存中
       if (cache.hasOwnProperty(serviceName)) {
+        //如果这个service处于初始化状态中，说明初始化这个service存在circular dependency
         if (cache[serviceName] === INSTANTIATING) {
           throw $injectorMinErr('cdep', 'Circular dependency found: {0}',
                     serviceName + ' <- ' + path.join(' <- '));
         }
         return cache[serviceName];
       } else {
+        //对于provider,provider之间不能存在任何依赖关系
         try {
           path.unshift(serviceName);
           cache[serviceName] = INSTANTIATING;
