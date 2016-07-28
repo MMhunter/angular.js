@@ -289,6 +289,7 @@ function forEachSorted(obj, iterator, context) {
 
 /**
  * when using forEach the params are value, key, but it is often useful to have key, value.
+ * 在forEachz中默认的键值对参数是value,key的顺序，然后就用这个翻转一下来保持key，value的顺序
  * @param {function(string, *)} iteratorFn
  * @returns {function(*, string)}
  */
@@ -466,7 +467,7 @@ noop.$inject = [];
 function identity($) {return $;}
 identity.$inject = [];
 
-
+//创造一个返回当前参数值的函数。。真是闲得慌
 function valueFn(value) {return function valueRef() {return value;};}
 
 function hasCustomToString(obj) {
@@ -1825,11 +1826,12 @@ function assertArg(arg, name, reason) {
   return arg;
 }
 
+//断言所传值是否为函数（允许array的话最后一个是否为函数）并返回这个函数
 function assertArgFn(arg, name, acceptArrayAnnotation) {
+  //如果允许使用array包含函数的方式,判断最后一个元素
   if (acceptArrayAnnotation && isArray(arg)) {
       arg = arg[arg.length - 1];
   }
-
   assertArg(isFunction(arg), name, 'not a function, got ' +
       (arg && typeof arg === 'object' ? arg.constructor.name || 'Object' : typeof arg));
   return arg;

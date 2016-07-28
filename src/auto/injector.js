@@ -695,13 +695,13 @@ function createInjector(modulesToLoad, strictDi) {
   strictDi = (strictDi === true);
   var INSTANTIATING = {},
       providerSuffix = 'Provider',
-      path = [],
+      path = [], //用于存储当前正在启动的service依赖顺序 ，比如如果A依赖B,B依赖C 那么最终为c<-b<-a
       loadedModules = new HashMap([], true), //此处HashMap为angular自己定义的类型，具体见src/apis.js
-      //provider缓存
+      //provider缓存,$provide是最基本的，先放在里面
       providerCache = {
         $provide: {
             provider: supportObject(provider),
-            factory: supportObject(factory),
+            factory:  supportObject(factory),
             service: supportObject(service),
             value: supportObject(value),
             constant: supportObject(constant),
@@ -717,29 +717,58 @@ function createInjector(modulesToLoad, strictDi) {
             //如果调用了这个函数，说明相应名字的provider不存在
             throw $injectorMinErr('unpr', "Unknown provider: {0}", path.join(' <- '));
           })),
+
+      //instance缓存
       instanceCache = {},
+
+      //原型实例Injector
       protoInstanceInjector =
           createInternalInjector(instanceCache, function(serviceName, caller) {
+            //从provider Injector获取相应的provider
             var provider = providerInjector.get(serviceName + providerSuffix, caller);
             return instanceInjector.invoke(
                 provider.$get, provider, undefined, serviceName);
           }),
+      //? 不是很明白在这里为什么要将instanceInjector赋值为protoInstanceInjector
+      //欧明白了,在下面loadModules时，使用的instanceInjector实际上是protoInstanceInjector
       instanceInjector = protoInstanceInjector;
 
+  //此处valueFn参照src/Angular.js中，返回一个返回protoInstanceInjector的函数
+  //于是在这里预先定义了$injectorProvider就是protoInstanceInjector
   providerCache['$injector' + providerSuffix] = { $get: valueFn(protoInstanceInjector) };
+  
+  //初始化所有modules，并且返回runBlock（也就是angular.module.run 里面的东西)
   var runBlocks = loadModules(modulesToLoad);
   instanceInjector = protoInstanceInjector.get('$injector');
   instanceInjector.strictDi = strictDi;
+
+  //执行runBlock里面的代码块
   forEach(runBlocks, function(fn) { if (fn) instanceInjector.invoke(fn); });
 
   return instanceInjector;
 
   ////////////////////////////////////
   // $provider
+  // 这边就是喜闻乐见的$provide中的函数了，大部分都能直接对angular.module使用
+  // 比如 angular.module('app').factory(....)
   ////////////////////////////////////
+
+  //如果是一个字典，就以这种方法执行
+      //比如有时会这么定义
+      /* 
+        module.factory({
+          a:function(){
+
+          },
+          b:function(){
+            
+          }
+        })
+      */
 
   function supportObject(delegate) {
     return function(key, value) {
+      
       if (isObject(key)) {
         forEach(key, reverseParams(delegate));
       } else {
@@ -748,6 +777,11 @@ function createInjector(modulesToLoad, strictDi) {
     };
   }
 
+  //$provide.provider 
+  //这个是一旦定义就会尝试实例化
+  //因此，自定义的provider不能相互依赖,即使不在同一个module中,
+  //仅仅能依赖angular module中的provider，
+  //也就是 $provide,$animateProvider,$filterProvider,$controllerProvider,$compileProvider,$compileProvider
   function provider(name, provider_) {
     assertNotHasOwnProperty(name, 'service');
     if (isFunction(provider_) || isArray(provider_)) {
@@ -759,6 +793,8 @@ function createInjector(modulesToLoad, strictDi) {
     return providerCache[name + providerSuffix] = provider_;
   }
 
+
+  //要求工厂函数必须返回一个值
   function enforceReturnValue(name, factory) {
     return function enforcedReturnValue() {
       var result = instanceInjector.invoke(factory, this);
@@ -769,26 +805,33 @@ function createInjector(modulesToLoad, strictDi) {
     };
   }
 
+  //$provide.factory
+  //会立刻调用$provide.provide创建一个相应的provider,factoryFn(或者它包含必须返回值assert的wrapper)作为$get函数
   function factory(name, factoryFn, enforce) {
     return provider(name, {
       $get: enforce !== false ? enforceReturnValue(name, factoryFn) : factoryFn
     });
   }
 
+  //$provider.service
   function service(name, constructor) {
     return factory(name, ['$injector', function($injector) {
-      return $injector.instantiate(constructor);
+      return $injector.instantiate (constructor);
     }]);
   }
 
+   //$provider.value 实际上和上面的service一样，都是打包后的factory
   function value(name, val) { return factory(name, valueFn(val), false); }
 
+
+  //这边的constant会同时存在于providerCache和instanceCache中
   function constant(name, value) {
     assertNotHasOwnProperty(name, 'constant');
     providerCache[name] = value;
     instanceCache[name] = value;
   }
 
+  //很明显，用来修改原有的service的provider，这样在它实例化的时候，会调用这个额外的函数
   function decorator(serviceName, decorFn) {
     var origProvider = providerInjector.get(serviceName + providerSuffix),
         orig$get = origProvider.$get;
@@ -801,14 +844,23 @@ function createInjector(modulesToLoad, strictDi) {
 
   ////////////////////////////////////
   // Module Loading
+  // 加载module
   ////////////////////////////////////
   function loadModules(modulesToLoad) {
+    
     assertArg(isUndefined(modulesToLoad) || isArray(modulesToLoad), 'modulesToLoad', 'not an array');
     var runBlocks = [], moduleFn;
+    //依顺序加载modules
+    //
     forEach(modulesToLoad, function(module) {
-      if (loadedModules.get(module)) return;
+      if (loadedModules.get(module)) return; //如果这个module（在这次注入操作时）已经被加载了，返回
       loadedModules.put(module, true);
 
+      //对于invoke队列来说，第一个是参数是provider,第二个参数是provider中的方法名，第三个是要执行的参数数组
+      //比如说对于angualr.module('app').factory('example',function(){return {}}),
+      //invokeArgs[0] = '$provide'
+      //invokeArgs[1] = 'factory'
+      //invokeArgs[2 ]=  ['example',function(){return {}}]
       function runInvokeQueue(queue) {
         var i, ii;
         for (i = 0, ii = queue.length; i < ii; i++) {
@@ -822,7 +874,9 @@ function createInjector(modulesToLoad, strictDi) {
       try {
         if (isString(module)) {
           moduleFn = angularModule(module);
+          //将要执行的module的run代码块加入runBlocks里面
           runBlocks = runBlocks.concat(loadModules(moduleFn.requires)).concat(moduleFn._runBlocks);
+          //执行哪些已经在module中塞入队列的初始化,两个队列有先后顺序
           runInvokeQueue(moduleFn._invokeQueue);
           runInvokeQueue(moduleFn._configBlocks);
         } else if (isFunction(module)) {
@@ -868,7 +922,8 @@ function createInjector(modulesToLoad, strictDi) {
         }
         return cache[serviceName];
       } else {
-        //对于provider,provider之间不能存在任何依赖关系
+        //将这个service加入当前依赖队列并放在第一个，并在cache中标记这个Service为初始化中
+        //对于provider,依赖的provider不能可能在此时还没启动(provider永远会在所有实例service启动之前启动，并且不能存在相互依赖)
         try {
           path.unshift(serviceName);
           cache[serviceName] = INSTANTIATING;
@@ -884,7 +939,7 @@ function createInjector(modulesToLoad, strictDi) {
       }
     }
 
-
+    //为参数注入
     function injectionArgs(fn, locals, serviceName) {
       var args = [],
           $inject = createInjector.$$annotate(fn, strictDi, serviceName);
@@ -895,12 +950,14 @@ function createInjector(modulesToLoad, strictDi) {
           throw $injectorMinErr('itkn',
                   'Incorrect injection token! Expected service name as string, got {0}', key);
         }
+        //如果存在本地临时可注入的变量，注入本地变量，否则注入相应service
         args.push(locals && locals.hasOwnProperty(key) ? locals[key] :
                                                          getService(key, serviceName));
       }
       return args;
     }
 
+    //判断这个函数是否是一个类的构造函数
     function isClass(func) {
       // IE 9-11 do not support classes and IE9 leaks with the code below.
       if (msie <= 11 || typeof func !== 'function') {
@@ -915,17 +972,25 @@ function createInjector(modulesToLoad, strictDi) {
       return result;
     }
 
+    
+    // 执行函数，一般用于创建Service实例（调用provider的$get方法)
+    // 以self作为this执行fn
+    // locals应该是用于注入本地的service，比如ngRoute中resolve后注入controller的变量
     function invoke(fn, self, locals, serviceName) {
+      //如果此时locals是一个字符串，说明当前正在启动的service是一个本地service
       if (typeof locals === 'string') {
         serviceName = locals;
         locals = null;
       }
-
+      //为启动这个Service注入
+      //此处args保存的是已经完成启动的实例
       var args = injectionArgs(fn, locals, serviceName);
       if (isArray(fn)) {
         fn = fn[fn.length - 1];
       }
 
+      //这里会判断这个service实例化的时候是否是使用一个类的构造函数，
+      //如果是构造函数，那么返回值也会是调用这个构造函数返回的相应类的实例
       if (!isClass(fn)) {
         // http://jsperf.com/angularjs-invoke-apply-vs-switch
         // #5388
@@ -936,7 +1001,9 @@ function createInjector(modulesToLoad, strictDi) {
       }
     }
 
-
+    //实例化一个service
+    //这个只能用于对于类的实例化
+    //?实际上用invoke也能完成这个事情。。。可能是为了在不是构造函数时能够报错
     function instantiate(Type, locals, serviceName) {
       // Check if Type is annotated and use just the given function at n-1 as parameter
       // e.g. someModule.factory('greeter', ['$window', function(renamed$window) {}]);

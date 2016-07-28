@@ -7,6 +7,7 @@
  * @description
  *
  * Interface for configuring angular {@link angular.module modules}.
+ * 喜闻乐见的angular.module系列函数，
  */
 
 function setupModuleLoader(window) {
@@ -14,6 +15,7 @@ function setupModuleLoader(window) {
   var $injectorMinErr = minErr('$injector');
   var ngMinErr = minErr('ng');
 
+  //懒加载函数,如果obj里面有name的东西，返回obj[name],否则使用后面的factory生成一个.
   function ensure(obj, name, factory) {
     return obj[name] || (obj[name] = factory());
   }
@@ -336,6 +338,8 @@ function setupModuleLoader(window) {
          * @param {String=} insertMethod
          * @returns {angular.Module}
          */
+        //module里面都是这样的一个闭包，当调用相关函数时，只是将相关参数以及相关的$provider等压入执行队列
+        //因此module不被加载的时候里面所有的东西都必定是不可以用的（废话)
         function invokeLater(provider, method, insertMethod, queue) {
           if (!queue) queue = invokeQueue;
           return function() {

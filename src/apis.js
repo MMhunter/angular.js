@@ -56,7 +56,6 @@ HashMap.prototype = {
    * @param value value to store can be any type
    */
   put: function(key, value) {
-    console.log(this);
     this[hashKey(key, this.nextUid)] = value;
   },
 
