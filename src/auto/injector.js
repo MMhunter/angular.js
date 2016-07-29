@@ -779,8 +779,7 @@ function createInjector(modulesToLoad, strictDi) {
 
   //$provide.provider 
   //这个是一旦定义就会尝试实例化
-  //因此，自定义的provider不能相互依赖,即使不在同一个module中,
-  //仅仅能依赖angular module中的provider，
+  //因此，自定义的provider必须严格遵守依赖顺序,
   //也就是 $provide,$animateProvider,$filterProvider,$controllerProvider,$compileProvider,$compileProvider
   function provider(name, provider_) {
     assertNotHasOwnProperty(name, 'service');
@@ -952,7 +951,7 @@ function createInjector(modulesToLoad, strictDi) {
         }
         //如果存在本地临时可注入的变量，注入本地变量，否则注入相应service
         args.push(locals && locals.hasOwnProperty(key) ? locals[key] :
-                                                         getService(key, serviceName));
+                                                         getService(key, serviceName)); //此处getService如果不存在的话会执行定义的factory创建一个
       }
       return args;
     }
