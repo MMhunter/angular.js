@@ -692,7 +692,7 @@ function annotate(fn, strictDi, name) {
 //这个函数就会返回$inject对象，它在src/Angular.js中被调用
 function createInjector(modulesToLoad, strictDi) {
   //是否开启strict模式
-  strictDi = (strictDi === true);
+  strictDi = (strictDi === true); 
   var INSTANTIATING = {},
       providerSuffix = 'Provider',
       path = [], //用于存储当前正在启动的service依赖顺序 ，比如如果A依赖B,B依赖C 那么最终为c<-b<-a
@@ -705,10 +705,10 @@ function createInjector(modulesToLoad, strictDi) {
             service: supportObject(service),
             value: supportObject(value),
             constant: supportObject(constant),
-            decorator: decorator
+            decorator:  decorator
           }
       },
-      //provider Injector, 用于存储，处理provider的service
+      //provider Injector, 用于存储，处理provider的service 
       providerInjector = (providerCache.$injector =
           createInternalInjector(providerCache, function(serviceName, caller) {
             if (angular.isString(caller)) {
@@ -874,7 +874,7 @@ function createInjector(modulesToLoad, strictDi) {
       try {
         if (isString(module)) {
           moduleFn = angularModule(module);
-          //将要执行的module的run代码块加入runBlocks里面
+          //先加载依赖module,加载后把依赖的runblock加到当前runblocks和这个module的runblocks之间
           runBlocks = runBlocks.concat(loadModules(moduleFn.requires)).concat(moduleFn._runBlocks);
           //执行哪些已经在module中塞入队列的初始化,两个队列有先后顺序
           runInvokeQueue(moduleFn._invokeQueue);
@@ -939,7 +939,7 @@ function createInjector(modulesToLoad, strictDi) {
       }
     }
 
-    //为参数注入
+    //为参数注入，返回实例化后的注入对象
     function injectionArgs(fn, locals, serviceName) {
       var args = [],
           $inject = createInjector.$$annotate(fn, strictDi, serviceName);
