@@ -1902,7 +1902,9 @@ function getBlockNodes(nodes) {
 /**
  * Creates a new object without a prototype. This object is useful for lookup without having to
  * guard against prototypically inherited properties via hasOwnProperty.
- *
+ * 创建一个没有prototype的object
+ * 可以通过hasOwnProperty进行查找，同时无视通过原型链继承的properties。
+ * 
  * Related micro-benchmarks:
  * - http://jsperf.com/object-create2
  * - http://jsperf.com/proto-map-lookup/2

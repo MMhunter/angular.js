@@ -948,6 +948,7 @@
 
 var $compileMinErr = minErr('$compile');
 
+//强行定义一个class
 function UNINITIALIZED_VALUE() {}
 var _UNINITIALIZED_VALUE = new UNINITIALIZED_VALUE();
 
@@ -956,7 +957,9 @@ var _UNINITIALIZED_VALUE = new UNINITIALIZED_VALUE();
  * @name $compileProvider
  *
  * @description
+ * provder本身的初始化函数,调用返回$compileProvider
  */
+//$$sanitizeUriProvider 具体见  src/ng/sanitizeUri.js, 用来驱鬼XSS
 $CompileProvider.$inject = ['$provide', '$$sanitizeUriProvider'];
 function $CompileProvider($provide, $$sanitizeUriProvider) {
   var hasDirectives = {},
@@ -970,9 +973,16 @@ function $CompileProvider($provide, $$sanitizeUriProvider) {
   // The assumption is that future DOM event attribute names will begin with
   // 'on' and be composed of only English letters.
   var EVENT_HANDLER_ATTR_REGEXP = /^(on[a-z]+|formaction)$/;
+
+  // 用来存储已经被绑定过的变量定义
   var bindingCache = createMap();
 
+  //parse isolated scope 的绑定参数
+  //返回一个标准的绑定元素数组，里面存储了这些绑定值的基本属性，比如是“=”,"&"还是"@",是不是可选等
+  //就是通常 directive 中通过scope定义的 = @ &之类的从外部传入的变量
+  //此处传入的scope应该就是这个定义的map 如 {a:"=",b:"@c"}
   function parseIsolateBindings(scope, directiveName, isController) {
+    //用来匹配
     var LOCAL_REGEXP = /^\s*([@&<]|=(\*?))(\??)\s*(\w*)\s*$/;
 
     var bindings = createMap();
@@ -982,6 +992,7 @@ function $CompileProvider($provide, $$sanitizeUriProvider) {
         bindings[scopeName] = bindingCache[definition];
         return;
       }
+      //检查定义是否符合规范
       var match = definition.match(LOCAL_REGEXP);
 
       if (!match) {
@@ -993,6 +1004,7 @@ function $CompileProvider($provide, $$sanitizeUriProvider) {
             "isolate scope definition"));
       }
 
+      //添加标准化绑定成员
       bindings[scopeName] = {
         mode: match[1][0],
         collection: match[2] === '*',
